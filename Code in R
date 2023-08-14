@@ -1,0 +1,125 @@
+library(dplyr)
+library(ggplot2)
+library(ggpubr)
+library(ggcorrplot)
+project_data <- read.csv("Downloads/project data.csv")
+head(project_data)
+nrow(project_data)
+summary(project_data)
+# Total N/A values
+sum(is.na(project_data))
+# Cleaning the data
+project_data <-na.omit(project_data)
+head(project_data)
+summary(project_data)
+# changing gender into numericals
+project_data$M.F <- ifelse(project_data$M.F == "M", 1, 0)
+# "converted" rows removed
+project_data<- subset(project_data, Group != "Converted")
+nrow(project_data)
+# adding a column for easy analysis
+project_data <- project_data %>%
+ mutate(Group_logic = as.numeric(Group == "Demented"))
+################## Analysis
+10
+# Bar graph of different groups and genders
+ggplot(project_data, aes(x = Group, fill = factor(M.F))) +
+ geom_bar(position = "dodge") +
+ xlab("Group") +
+ ylab("Count") +
+ ggtitle("Bar Graph of Different Groups and Genders") +
+ scale_fill_manual(values = c("#FFC0CB", "#ADD8E6"), labels = c("Female", "Male")) +
+ theme_minimal()
+###########
+# Histogram of SES (Socioeconomic Status)
+ggplot(project_data, aes(x = SES)) +
+ geom_histogram(binwidth = 1, fill = "#56B4E9", color = "black") +
+ labs(title = "SES Distribution",
+ x = "SES",
+ y = "Count") +
+ theme_minimal()
+head(project_data)
+# Scatter Plot of Age vs. MMSE by Dementia Status
+ggplot(project_data, aes(x = Age, y = MMSE, color = factor(Group_logic))) +
+ geom_point() +
+ labs(title = "Age vs. MMSE by Dementia Status",
+ x = "Age",
+ y = "MMSE",
+ color = "Dementia Status") +
+ theme_minimal()
+11
+# Boxplot
+# Box plot of MMSE scores by Gender
+ggplot(Alzheimer_data, aes(x = Gender, y = MMSE,group=Gender)) +
+ geom_boxplot() +
+ labs(title = "MMSE Scores by Gender",
+ x = "Gender",
+ y = "MMSE") +
+ theme_minimal()
+##################################Q2######################
+# Select only the numerical columns for clustering
+numerical_data <- project_data[, c("M.F","Age", "EDUC", "SES", "MMSE", "CDR",
+"eTIV", "nWBV", "ASF","Group_logic")]
+# Standardize the numerical data
+scaled_data <- scale(numerical_data)
+# Determine the optimal number of clusters using the elbow method
+wss <- numeric(length = 15)
+for (i in 1:15) {
+kmeans_model <- kmeans(scaled_data, centers = i, nstart = 25)
+ wss[i] <- kmeans_model$tot.withinss
+}
+plot(1:15, wss, type = "b", pch = 19, frame = FALSE,
+ xlab = "Number of Clusters", ylab = "Total Within-Cluster Sum of Squares")
+# Select the optimal number of clusters based on the elbow point
+optimal_k <- 3
+# Apply k-means clustering
+kmeans_model <- kmeans(scaled_data, centers = optimal_k, nstart = 25)
+# Add the cluster labels to the original dataframe
+12
+project_data$cluster <- as.factor(kmeans_model$cluster)
+# Plot the scatter plot with color-coded clusters
+fviz_cluster(kmeans_model, data = scaled_data )
+# Perform hierarchical agglomerative clustering using the average method
+hierarchical_average <- hclust(dist(numerical_data, method = "euclidean"), method =
+"average")
+# Perform hierarchical agglomerative clustering using the centroid method
+hierarchical_centroid <- hclust(dist(numerical_data, method = "euclidean"), method =
+"centroid")
+plot(hierarchical_average)
+rect.hclust(hierarchical_average, k=7, border="red")
+plot(hierarchical_centroid)
+rect.hclust(hierarchical_centroid, k=7, border="red")
+######################################
+#feature selection
+library('faraway')
+library('ISLR')
+feature_data <- project_data[, c("M.F","Age", "EDUC", "SES", "MMSE", "CDR", "eTIV",
+"nWBV", "ASF")]
+# Defining the target variable (Group)
+target <- project_data$Group_logic
+# Creating a generalized linear model (GLM) object
+13
+glm_model <- glm(target ~ ., data = feature_data, family = binomial)
+# Performing stepwise variable selection
+selected_features <- step(glm_model, direction = "both")
+# Printing the selected features
+print(selected_features)
+##########################################
+# Logic regression *********************
+# Selecting the relevant variables for the logistic regression model
+feature_data <- project_data[, c("Age", "CDR", "nWBV", "SES","eTIV")]
+target <- project_data$Group_logic
+set.seed(75)
+train_indices <- sample(1:nrow(data), round(0.7 * nrow(data))) # 70% for training
+train_data <- feature_data[train_indices, ]
+train_target <- target[train_indices]
+test_data <- feature_data[-train_indices, ]
+test_target <- target[-train_indices]
+model <- glm(train_target ~ ., data = train_data, family = binomial)
+14
+predictions <- predict(model, newdata = test_data, type = "response")
+predicted_classes <- ifelse(predictions > 0.5, 1, 0)
+# Calculate accuracy
+accuracy <- sum(predicted_classes == test_target) / length(test_target)
+print(paste("Accuracy:", accuracy))
+# Resulting accuracy is 98.947 %
